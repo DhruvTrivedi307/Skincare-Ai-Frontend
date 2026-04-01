@@ -123,14 +123,18 @@ export default function Page() {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
 
             const video = videoRef.current!;
-            video.srcObject = stream;
+            if(video){
+                video.srcObject = stream;
+            }
 
-            await new Promise<void>((resolve) => {
-                video.onloadedmetadata = () => {
-                    video.play();
-                    resolve();
-                };
-            });
+            if(video){
+                await new Promise<void>((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        resolve();
+                    };
+                });
+            }
 
             const canvas = canvasRef.current!;
             const ctx = canvas.getContext("2d")!;
@@ -139,21 +143,27 @@ export default function Page() {
             function detect() {
                 if (!running || !faceLandmarker) return;
 
-                if (video.videoWidth === 0 || video.videoHeight === 0) {
-                    requestAnimationFrame(detect);
-                    return;
+                if(video){
+                    if (video.videoWidth === 0 || video.videoHeight === 0) {
+                        requestAnimationFrame(detect);
+                        return;
+                    }
                 }
 
-                video.width = video.videoWidth;
-                video.height = video.videoHeight;
+                if(video){
+                    video.width = video.videoWidth;
+                    video.height = video.videoHeight;
 
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                }
 
-                const results = faceLandmarker.detectForVideo(
-                    video,
-                    performance.now()
-                );
+                if(video){
+                    const results = faceLandmarker.detectForVideo(
+                        video,
+                        performance.now()
+                    );
+                
 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -233,6 +243,7 @@ export default function Page() {
                         });
                     }
                 }
+            }
 
                 requestAnimationFrame(detect);
             }
