@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
     FaceLandmarker,
-    FilesetResolver,
-    DrawingUtils
+    FilesetResolver
 } from "@mediapipe/tasks-vision";
 import { Camera, RotateCcw } from 'lucide-react';
 import { Accordion, AccordionDetails, AccordionSummary, Button, Card, CardActions, CardContent, CardMedia, CircularProgress, Typography } from "@mui/material";
@@ -13,11 +12,10 @@ import { Box } from "@mui/material";
 import PillNav from "@/components/PillNav";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
-import { Loader, Placeholder } from 'rsuite';
 import '../loader.css';
 import Lottie from "lottie-react";
 import loaderAnimation from "@/components/AI-Skin-Analysis.json";
-import { red, yellow, green } from '@mui/material/colors'
+import { yellow, green } from '@mui/material/colors'
 import { Chart, RadarController, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from 'chart.js';
 
 Chart.register(RadarController, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
@@ -50,7 +48,6 @@ export const REGION_COLORS: Record<string, string> = {
 };
 
 export default function Page() {
-    const videoRef = useRef<HTMLVideoElement>(null);
     const imageRef = useRef<HTMLImageElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -89,7 +86,7 @@ export default function Page() {
     }
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-    const [activeRegions, setActiveRegions] = useState<string[]>([
+    const activeRegions = [
         "left_cheek",
         "right_cheek",
         "chin",
@@ -97,166 +94,7 @@ export default function Page() {
         "nose",
         "left_eye_bottom",
         "right_eye_bottom"
-    ]);
-
-    const [isFaceInside, setIsFaceInside] = useState(false);
-
-    useEffect(() => {
-        let faceLandmarker: FaceLandmarker | null = null;
-        let running = true;
-
-        async function init() {
-            const vision = await FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-            );
-
-            faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-                baseOptions: {
-                    modelAssetPath:
-                        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO",
-                numFaces: 1
-            });
-
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-
-            const video = videoRef.current!;
-            if(video){
-                video.srcObject = stream;
-            }
-
-            if(video){
-                await new Promise<void>((resolve) => {
-                    video.onloadedmetadata = () => {
-                        video.play();
-                        resolve();
-                    };
-                });
-            }
-
-            const canvas = canvasRef.current!;
-            const ctx = canvas.getContext("2d")!;
-            const drawingUtils = new DrawingUtils(ctx);
-
-            function detect() {
-                if (!running || !faceLandmarker) return;
-
-                if(video){
-                    if (video.videoWidth === 0 || video.videoHeight === 0) {
-                        requestAnimationFrame(detect);
-                        return;
-                    }
-                }
-
-                if(video){
-                    video.width = video.videoWidth;
-                    video.height = video.videoHeight;
-
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                }
-
-                if(video){
-                    const results = faceLandmarker.detectForVideo(
-                        video,
-                        performance.now()
-                    );
-                
-
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                if (results.faceLandmarks) {
-                    for (const landmarks of results.faceLandmarks) {
-
-                        let minX = Infinity, maxX = -Infinity;
-                        let minY = Infinity, maxY = -Infinity;
-
-                        landmarks.forEach((p) => {
-                            const x = p.x * canvas.width;
-                            const y = p.y * canvas.height;
-
-                            minX = Math.min(minX, x);
-                            maxX = Math.max(maxX, x);
-                            minY = Math.min(minY, y);
-                            maxY = Math.max(maxY, y);
-                        });
-
-                        const faceCenterX = (minX + maxX) / 2;
-                        const faceCenterY = (minY + maxY) / 2;
-
-                        const ovalWidth = canvas.width * 0.5;
-                        const ovalHeight = canvas.height * 0.9;
-
-                        const ovalCenterX = canvas.width / 2;
-                        const ovalCenterY = canvas.height / 2;
-
-                        const dx = (faceCenterX - ovalCenterX) / (ovalWidth / 2);
-                        const dy = (faceCenterY - ovalCenterY) / (ovalHeight / 2);
-
-                        const inside = dx * dx + dy * dy <= 1;
-
-                        setIsFaceInside(inside);
-
-                        function drawRegion(indices: number[], color: string) {
-                            ctx.beginPath();
-                            indices.forEach((i, idx) => {
-                                const point = landmarks[i];
-                                const x = point.x * canvas.width;
-                                const y = point.y * canvas.height;
-
-                                if (idx === 0) ctx.moveTo(x, y);
-                                else ctx.lineTo(x, y);
-                            });
-                            ctx.closePath();
-                            ctx.fillStyle = color;
-                            ctx.globalAlpha = 0.5;
-                            ctx.fill();
-                            ctx.globalAlpha = 1;
-                        }
-
-                        activeRegions.forEach((region) => {
-                            drawRegion(FACE_REGIONS[region as keyof typeof FACE_REGIONS], REGION_COLORS[region]);
-                        });
-
-                        // drawingUtils.drawConnectors(
-                        //   landmarks,
-                        //   FaceLandmarker.FACE_LANDMARKS_TESSELATION,
-                        //   { color: "gray", lineWidth: 0.5 }
-                        // );
-                        ctx.fillStyle = "white";
-                        ctx.font = "14px Arial";
-                        ctx.textAlign = "left";
-                        ctx.textBaseline = "middle";
-
-                        landmarks.forEach((point, index) => {
-                            const x = point.x * canvas.width;
-                            const y = point.y * canvas.height;
-
-                            ctx.beginPath();
-                            ctx.arc(x, y, 2, 0, Math.PI * 2);
-                            ctx.fill();
-
-                            // ctx.fillText(index.toString(), x + 4, y);
-
-                        });
-                    }
-                }
-            }
-
-                requestAnimationFrame(detect);
-            }
-
-            detect();
-        }
-
-        init();
-
-        return () => {
-            running = false;
-        };
-    }, []);
+    ];
 
     const [loading, setLoading] = useState(false);
     const [analysis, setAnalysis] = useState<Record<string, any> | null>(null);
@@ -347,7 +185,10 @@ export default function Page() {
         }
 
         if (result.status === "completed") {
-            setAnalysis(result.data);
+            setAnalysis({
+                ...result.data,
+                products: result.products || []
+            });
         }
 
         setLoading(false)
@@ -371,7 +212,10 @@ export default function Page() {
         const chin = data.chin;
         const left_eye_bottom = data.left_eye_bottom;
         const right_eye_bottom = data.right_eye_bottom;
-        setAnalysis(data);
+        setAnalysis({
+            ...data,
+            products: result.products || []
+        });
 
         if (error === true) {
             setOpen(true);
@@ -421,21 +265,6 @@ export default function Page() {
         console.log(right_eye_bottom.result);
 
     }
-
-    function captureImageBase64(): string {
-        const video = videoRef.current!;
-        const canvas = document.createElement("canvas");
-
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        return canvas.toDataURL("image/jpeg", 0.85);
-    }
-
-
     useEffect(() => {
         const canvas = document.getElementById("skinRadarChart") as HTMLCanvasElement | null;
         if (!canvas) return;
@@ -625,7 +454,7 @@ export default function Page() {
                             { label: 'Camera', href: '/' },
                             { label: 'Upload Image', href: '/upload' },
                         ]}
-                        activeHref="/"
+                        activeHref="/upload"
                         className="custom-nav pt-4"
                         ease="power2.easeOut"
                         baseColor="#858585"
@@ -953,7 +782,7 @@ export default function Page() {
                                                             No products found for your skin analysis.
                                                         </div>
                                                     )}
-                                                </div>
+                                                </div> 
                                             </AccordionDetails>
                                         </Accordion>
 
@@ -964,7 +793,7 @@ export default function Page() {
                                     <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
                                         <Camera className="w-6 h-6 opacity-50" />
                                     </div>
-                                    <p className="text-xs">Take a photo to see your results</p>
+                                    <p className="text-xs">Upload an image to see your results</p>
                                 </div>
                             )}
                         </div>

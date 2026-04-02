@@ -235,7 +235,7 @@ export default function Page() {
     setCapturedImage(img);
 
     setIsAnalyzing(true);
-    setLoading(true);
+    setLoading(true); 
 
     const formData = new FormData();
 
